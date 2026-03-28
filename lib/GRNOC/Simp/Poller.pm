@@ -4,10 +4,11 @@ use strict;
 use warnings;
 use Data::Dumper;
 use Moo;
-use Types::Standard qw( Str Bool );
+use Types::Standard qw( Str Bool Int );
 
 use Parallel::ForkManager;
 use Proc::Daemon;
+use Digest::MD5 qw(md5_hex);
 
 use GRNOC::Config;
 use GRNOC::Log;
@@ -29,6 +30,16 @@ has logging_file => ( is => 'ro',
 has daemonize => ( is => 'ro',
                    isa => Bool,
                    default => 1 );
+
+# Hash ring: which poller instance is this (0-indexed)
+has poller_id => ( is => 'rwp',
+                   isa => Int,
+                   default => 0 );
+
+# Hash ring: total number of poller instances sharing the load
+has total_pollers => ( is => 'rwp',
+                       isa => Int,
+                       default => 1 );
 
 ### private attributes ###
 
@@ -55,7 +66,32 @@ sub BUILD {
 
     $self->_set_config( $config );
 
+    # read optional hash-ring settings from config
+    # <poller id="0" total="3"/>
+    my $poller_id     = $config->get( '/config/poller/@id' );
+    my $total_pollers = $config->get( '/config/poller/@total' );
+
+    if ( defined $poller_id && defined $poller_id->[0] ) {
+        $self->_set_poller_id( int( $poller_id->[0] ) );
+    }
+    if ( defined $total_pollers && defined $total_pollers->[0] && $total_pollers->[0] > 0 ) {
+        $self->_set_total_pollers( int( $total_pollers->[0] ) );
+    }
+
     return $self;
+}
+
+# Returns 1 if this poller instance owns the given host IP on the hash ring.
+# Uses MD5 of the IP so distribution is deterministic and even across pollers.
+sub _host_in_ring {
+
+    my ( $self, $ip ) = @_;
+
+    return 1 if $self->total_pollers <= 1;
+
+    # Take the first 8 hex digits of MD5 (32 bits) and map to a poller slot
+    my $hash = hex( substr( md5_hex($ip), 0, 8 ) );
+    return ( $hash % $self->total_pollers ) == $self->poller_id;
 }
 
 
@@ -149,10 +185,16 @@ sub _create_workers {
 	push(@oids,$line->{'oid'});
       }
 
-      #--- split hosts between workers
+      #--- filter hosts to only those owned by this poller on the hash ring
+      my @ring_hosts = grep { $self->_host_in_ring( $_->{'ip'} ) } @{$group->{'host'}};
+
+      $self->logger->info( "Hash ring (id=" . $self->poller_id . ", total=" . $self->total_pollers . "): "
+          . scalar(@ring_hosts) . " of " . scalar(@{$group->{'host'}}) . " hosts assigned to this poller for group: $name" );
+
+      #--- split ring-assigned hosts between workers (round-robin)
       my %hosts;
       my $idx=0;
-      foreach my $host (@{$group->{'host'}}){
+      foreach my $host (@ring_hosts){
         push(@{$hosts{$idx}},$host);
         $idx++;
         if($idx>=$workers) { $idx = 0; }
