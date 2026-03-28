@@ -66,19 +66,82 @@ sub BUILD {
 
     $self->_set_config( $config );
 
-    # read optional hash-ring settings from config
-    # <poller id="0" total="3"/>
-    my $poller_id     = $config->get( '/config/poller/@id' );
-    my $total_pollers = $config->get( '/config/poller/@total' );
-
-    if ( defined $poller_id && defined $poller_id->[0] ) {
-        $self->_set_poller_id( int( $poller_id->[0] ) );
-    }
-    if ( defined $total_pollers && defined $total_pollers->[0] && $total_pollers->[0] > 0 ) {
-        $self->_set_total_pollers( int( $total_pollers->[0] ) );
-    }
+    $self->_load_ring_config();
 
     return $self;
+}
+
+# Resolve poller_id and total_pollers.  Priority order (highest first):
+#   1. Environment variables  SIMP_POLLER_ID / SIMP_TOTAL_POLLERS
+#   2. Config file            <poller id="N" total="M"/>
+#   3. StatefulSet hostname   e.g. "simp-poller-2"  →  id=2
+#   4. Defaults               id=0, total=1  (poll everything)
+sub _load_ring_config {
+
+    my ( $self ) = @_;
+
+    my $config = $self->config;
+
+    # --- poller_id ---
+    my $id;
+
+    if ( defined $ENV{SIMP_POLLER_ID} && $ENV{SIMP_POLLER_ID} =~ /^\d+$/ ) {
+        $id = int( $ENV{SIMP_POLLER_ID} );
+        $self->logger->info( "Hash ring: poller_id=$id (from SIMP_POLLER_ID env var)" );
+    }
+    else {
+        my $cfg_id = $config->get( '/config/poller/@id' );
+        if ( defined $cfg_id && defined $cfg_id->[0] ) {
+            $id = int( $cfg_id->[0] );
+            $self->logger->info( "Hash ring: poller_id=$id (from config file)" );
+        }
+        elsif ( defined $ENV{HOSTNAME} && $ENV{HOSTNAME} =~ /-(\d+)$/ ) {
+            # StatefulSet pods have hostnames like "simp-poller-2"
+            $id = int( $1 );
+            $self->logger->info( "Hash ring: poller_id=$id (auto-detected from HOSTNAME=$ENV{HOSTNAME})" );
+        }
+    }
+    $self->_set_poller_id( $id ) if defined $id;
+
+    # --- total_pollers ---
+    my $total;
+
+    if ( defined $ENV{SIMP_TOTAL_POLLERS} && $ENV{SIMP_TOTAL_POLLERS} =~ /^\d+$/ && $ENV{SIMP_TOTAL_POLLERS} > 0 ) {
+        $total = int( $ENV{SIMP_TOTAL_POLLERS} );
+        $self->logger->info( "Hash ring: total_pollers=$total (from SIMP_TOTAL_POLLERS env var)" );
+    }
+    else {
+        my $cfg_total = $config->get( '/config/poller/@total' );
+        if ( defined $cfg_total && defined $cfg_total->[0] && $cfg_total->[0] > 0 ) {
+            $total = int( $cfg_total->[0] );
+            $self->logger->info( "Hash ring: total_pollers=$total (from config file)" );
+        }
+    }
+    $self->_set_total_pollers( $total ) if defined $total;
+}
+
+# Kill all child workers and re-partition under the new ring config.
+# Called on SIGHUP so a Kubernetes rolling restart (or ConfigMap update +
+# kill -HUP) immediately picks up a changed SIMP_TOTAL_POLLERS value.
+sub _reload {
+
+    my ( $self ) = @_;
+
+    my @pids = @{$self->children};
+
+    if ( @pids ) {
+        $self->logger->info( 'Stopping child workers for reload: ' . join( ' ', @pids ) );
+        kill( 'TERM', @pids );
+    }
+
+    # Re-read ring config from env vars / config file
+    $self->_load_ring_config();
+
+    $self->logger->info( 'Reloaded ring config: poller_id=' . $self->poller_id
+        . ' total_pollers=' . $self->total_pollers );
+
+    # _create_workers will be reached again in the main loop after
+    # wait_all_children returns (children received TERM above).
 }
 
 # Returns 1 if this poller instance owns the given host IP on the hash ring.
@@ -112,7 +175,8 @@ sub start {
 
     $SIG{'HUP'} = sub {
 
-        $self->logger->info( 'Received SIG HUP.' );
+        $self->logger->info( 'Received SIG HUP — re-reading ring config and restarting workers.' );
+        $self->_reload();
     };
 
     # need to daemonize
@@ -132,7 +196,7 @@ sub start {
             # change process name
             $0 = "simpPoller";
 
-            $self->_create_workers();
+            $self->_run_workers();
         }
     }
 
@@ -141,7 +205,7 @@ sub start {
 
         $self->logger->debug( 'Running in foreground.' );
 
-        $self->_create_workers();
+        $self->_run_workers();
     }
 
     return 1;
@@ -161,6 +225,24 @@ sub stop {
 }
 
 #-------- end of multprocess boilerplate
+
+# Outer loop: run workers, then re-create them if SIGHUP caused a reload.
+sub _run_workers {
+
+    my ( $self ) = @_;
+
+    while (1) {
+        $self->_create_workers();
+
+        # _create_workers only returns after all children have exited.
+        # If that was triggered by SIGHUP/_reload the ring config is already
+        # updated, so just loop and start fresh workers.  A normal SIGTERM
+        # from stop() will have killed the process before reaching here.
+        $self->logger->info( 'All workers exited — restarting with updated ring config '
+            . '(poller_id=' . $self->poller_id . ', total_pollers=' . $self->total_pollers . ').' );
+    }
+}
+
 sub _create_workers {
 
     my ( $self ) = @_;

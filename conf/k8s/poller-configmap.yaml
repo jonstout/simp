@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: simp-poller-ring
+  namespace: simp
+data:
+  # Total number of poller replicas sharing the hash ring.
+  # Update this value and do a rolling restart when scaling up or down.
+  SIMP_TOTAL_POLLERS: "3"

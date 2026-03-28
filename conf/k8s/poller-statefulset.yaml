@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: simp-poller
+  namespace: simp
+spec:
+  serviceName: simp-poller
+  # Keep replicas in sync with SIMP_TOTAL_POLLERS in the ConfigMap.
+  replicas: 3
+  selector:
+    matchLabels:
+      app: simp-poller
+  template:
+    metadata:
+      labels:
+        app: simp-poller
+    spec:
+      # Spread pods across nodes so a node failure only takes out one ring slot.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: simp-poller
+
+      containers:
+        - name: poller
+          image: your-registry/simp:latest
+          # SIMP_POLLER_ID is auto-detected from the StatefulSet hostname
+          # (e.g. simp-poller-2 → id=2).  No manual setting needed here.
+          env:
+            - name: SIMP_TOTAL_POLLERS
+              valueFrom:
+                configMapKeyRef:
+                  name: simp-poller-ring
+                  key: SIMP_TOTAL_POLLERS
+          args:
+            - perl
+            - /usr/bin/simp.pl
+            - --config
+            - /etc/simp/config.xml
+            - --logging
+            - /etc/simp/logging.conf
+            - --nofork
+          volumeMounts:
+            - name: simp-config
+              mountPath: /etc/simp
+
+          # Allow a full poll cycle for in-flight SNMP requests to finish.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 5"]
+          terminationGracePeriodSeconds: 30
+
+      volumes:
+        - name: simp-config
+          configMap:
+            name: simp-config
+
+---
+# Headless service so pods can resolve each other by DNS if needed.
+apiVersion: v1
+kind: Service
+metadata:
+  name: simp-poller
+  namespace: simp
+spec:
+  clusterIP: None
+  selector:
+    app: simp-poller
