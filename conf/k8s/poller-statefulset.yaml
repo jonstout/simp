@@ -5,8 +5,8 @@ metadata:
   namespace: simp
 spec:
   serviceName: simp-poller
-  # Keep replicas in sync with SIMP_TOTAL_POLLERS in the ConfigMap.
-  replicas: 3
+  # When scaling, update replicas and SIMP_TOTAL_POLLERS together and redeploy.
+  replicas: {{ .Values.poller.replicas }}
   selector:
     matchLabels:
       app: simp-poller
@@ -15,7 +15,6 @@ spec:
       labels:
         app: simp-poller
     spec:
-      # Spread pods across nodes so a node failure only takes out one ring slot.
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
@@ -26,15 +25,12 @@ spec:
 
       containers:
         - name: poller
-          image: your-registry/simp:latest
-          # SIMP_POLLER_ID is auto-detected from the StatefulSet hostname
-          # (e.g. simp-poller-2 → id=2).  No manual setting needed here.
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           env:
+            # poller_id is auto-detected from the pod hostname ordinal at startup.
+            # total_pollers must match .spec.replicas above.
             - name: SIMP_TOTAL_POLLERS
-              valueFrom:
-                configMapKeyRef:
-                  name: simp-poller-ring
-                  key: SIMP_TOTAL_POLLERS
+              value: "{{ .Values.poller.replicas }}"
           args:
             - perl
             - /usr/bin/simp.pl
@@ -46,12 +42,6 @@ spec:
           volumeMounts:
             - name: simp-config
               mountPath: /etc/simp
-
-          # Allow a full poll cycle for in-flight SNMP requests to finish.
-          lifecycle:
-            preStop:
-              exec:
-                command: ["/bin/sh", "-c", "sleep 5"]
           terminationGracePeriodSeconds: 30
 
       volumes:
@@ -60,7 +50,6 @@ spec:
             name: simp-config
 
 ---
-# Headless service so pods can resolve each other by DNS if needed.
 apiVersion: v1
 kind: Service
 metadata:
