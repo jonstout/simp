@@ -1,46 +1,154 @@
-# simp
-A small system for gathering large amounts of snmp data.  The pacakge contains both a collector and a data service interface.  A multi-process collector gathers SNMP data from a set of hosts and put that data into a local Redis database.  A set of data services then provides access to this data via RabbitMQ.  Currently this code is PoC without proper init scripts etc, so the following is a bit... rustic.
+# SIMP
 
-##running the collector:
+SIMP is a small system for gathering large amounts of snmp data.
+
+The pacakge contains both a collector and a data service interface.
+A multi-process collector gathers SNMP data from a set of hosts and puts that data into a redis database.
+A set of data services then provides access to this data via RabbitMQ.
+
+## Version Management
+
+To update the version number across all files:
+
+```bash
+./update-version.sh 1.13.0
+```
+
+This updates the version in Makefile, spec files, and Perl modules.
+
+## Docker Deployment
+
+SIMP supports containerized deployments. See **[DOCKER_USAGE.md](DOCKER_USAGE.md)** for complete documentation.
+
+### Quick Start with Docker
+
+```bash
+# Build container image
+docker build -t simp:latest .
+
+# Run simp-poller
+docker run -d \
+  --name simp-poller \
+  -v $(pwd)/config:/etc/simp \
+  simp:latest /opt/simp/bin/simp-poller.pl
+```
+
+### Building RPMs within a Container
+
+To build RPM packages inside a Docker container for use in traditional server deployments:
+
+```bash
+# Build the RPM builder
+docker build -f Dockerfile.rpmbuild -t simp-rpmbuild .
+
+# Generate RPMs
+mkdir -p rpms
+docker run --rm -v $(pwd)/rpms:/output simp-rpmbuild
+```
+
+---
+
+## Running The Collector
+
+You will need a redis and rabbit server, accesible to the SIMP daemons.
+
 For now, you should have redis and rabbitmq installed locally and running.
-```
-./simp.pl --config /home/ebalas/config.xml --logging ../logging.conf
+
+```bash
+simp-poller.pl --config /etc/simp/poller/config.xml --logging /etc/simp/poller/logging.conf --user simp --group simp
 ```
 
-The config file controls collection interval, and the number of workers to use, what to collect and from whom.
+The config files controls collection interval, and the number of workers to use and what to collect.
 
-```
+```xml
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<!-- Simp-Poller Main Configuration -->
 <config>
- <redis host="127.0.0.1" port="6379"/>
-  
-  <group name="group-a" active="1" workers="2" poll_interval="60">
-    <mib oid="1.3.6.1.2.1.2.2.1"/>
-    <mib oid="1.3.6.1.2.1.1.3"/>
-    <host ip="10.0.2.1" community="come on"/>
-    <host ip="10.0.2.2" community="farva"/>
-    <host ip="10.0.2.3" community="man"/>
-  </group>
+    <!-- Redis host connection information -->
+    <redis ip="127.0.0.1" port="6379" reconnect="60" reconnect_every="500" read_timeout="2" write_timeout="3" />
 
-  <group name="group-b" active="0" workers="1" poll_interval="120">
-    <mib oid="1.3.6.1.2.1.2.2.1"/>
-    <mib oid="1.3.6.1.2.1.1.3"/>
-    <host ip="10.0.1.1" community="same"/>
-    <host ip="10.0.1.2" community="team"/>
-  </group>
+    <!-- How long to keep data in Redis before purging (seconds) -->
+    <purge interval="3600" />
 
+    <!-- Default num of results to get per SNMP request -->
+    <request_size results="15" />
+
+    <!-- Where to write status files -->
+    <status dir="/var/lib/simp/poller/" />
 </config>
 ```
 
-##running the data service:
+You will need at least one group definition in /etc/simp/poller/groups.d.
+Here is an example all_interfaces.xml group.
+
+```xml
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<group workers="1" interval="60" timeout="15">
+  <mib oid="1.3.6.1.2.1.31.1.1.1.6" /> <!-- inHCbytes -->
+  <mib oid="1.3.6.1.2.1.31.1.1.1.10" /> <!-- outHCbytes -->
+  <mib oid="1.3.6.1.2.1.2.2.1.14" /> <!-- inerror -->
+  <mib oid="1.3.6.1.2.1.2.2.1.20" /> <!-- outerror -->
+  <mib oid="1.3.6.1.2.1.2.2.1.11" /> <!-- inUcast -->
+  <mib oid="1.3.6.1.2.1.2.2.1.17" /> <!-- outUcast -->
+  <mib oid="1.3.6.1.2.1.2.2.1.13" /> <!-- indiscard -->
+  <mib oid="1.3.6.1.2.1.2.2.1.19" /> <!-- outdiscard -->
+  <mib oid="1.3.6.1.2.1.2.2.1.7" /> <!-- ifAdminStatus -->
+  <mib oid="1.3.6.1.2.1.2.2.1.8" /> <!-- ifOperStatus -->
+  <mib oid="1.3.6.1.2.1.31.1.1.1.1" /> <!-- ifName -->
+  <mib oid="1.3.6.1.2.1.31.1.1.1.18" /> <!-- ifAlias -->
+</group>
 ```
-./simpData.pl --config ../simpDataConfig.xml --logging ../logging.conf 
+
+And you need a file in /etc/simp/poller/hosts.d to define the device collections.
+The group id must match the file name in /etc/simp/poller/groups.d.
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+
+<config>
+    <!-- Connecticut Education 24x7-mem nodes -->
+    <host name="switch2.example.host" ip="1.1.1.1" community="its_a_secret_to_everyone" snmp_version="2c">
+        <group id="all_interfaces" />
+    </host>
+</config>
 ```
+
+## Running the Data Service
+
+```bash
+/usr/bin/simp-data.pl --config /etc/simp/data/config.xml --logging /etc/simp/data/logging.conf --user simp --group simp
+```
+
 The config is similar to that used by the poller with less details required.
-```
-<config workers="3" >
- <redis host="127.0.0.1" port="6379"/>
- <rabbitMQ host="127.0.0.1" port="5672"/>
+
+```xml
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<!-- Simp-Data Main Config -->
+<config workers="4">
+    <redis ip="127.0.0.1" port="6379" reconnect="60" reconnect_every="500" read_timeout="2" write_timeout="3" />
+    <rabbitmq ip="127.0.0.1" port="5672" user="guest" password="guest" />
 </config>
 ```
-##Testing
-Currently there are no unit tests.  To stress test some there are scripts in *bin* called *genTestData.pl* and *testClient.pl* 
+
+## Running the composite service
+
+```bash
+/usr/bin/simp-comp.pl --config /etc/simp/comp/config.xml --logging /etc/simp/comp/logging.conf --user simp --group simp
+```
+
+Config example:
+
+```xml
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<config workers="4">
+    <rabbitmq ip="127.0.0.1" port="5672" user="guest" password="guest" />
+</config>
+```
+
+## Testing
+
+#### Testing information can be found [here](https://github.com/GlobalNOC/simp/tree/master/t)

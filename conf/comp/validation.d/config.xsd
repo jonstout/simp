@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+    
+    <xsd:element name="config">
+        <xsd:complexType>
+            <xsd:sequence>
+                <xsd:element name="redis"    type="REDIS_CONFIG"    minOccurs="1" maxOccurs="1"/>
+                <xsd:element name="rabbitmq" type="RABBITMQ_CONFIG" minOccurs="1" maxOccurs="1"/>
+            </xsd:sequence>
+            <xsd:attribute name="workers" use="required">
+                <xsd:simpleType>
+                    <xsd:restriction base="xsd:integer">
+                        <xsd:minInclusive value="1"/>
+                        <xsd:maxInclusive value="100"/>
+                    </xsd:restriction>
+                </xsd:simpleType>
+            </xsd:attribute>
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:complexType name="RABBITMQ_CONFIG">
+        <xsd:attribute name="ip" type="xsd:string" use="required" />
+        <xsd:attribute name="port" type="xsd:integer" use="required" />
+        <xsd:attribute name="user" type="xsd:string" use="required" />
+        <xsd:attribute name="password" type="xsd:string" use="required" />
+    </xsd:complexType>
+
+    <xsd:complexType name="REDIS_CONFIG">
+        <xsd:attribute name="ip"        type="xsd:string"     use="optional" />
+        <xsd:attribute name="port"      type="xsd:integer" use="optional" />
+        <xsd:attribute name="reconnect" type="xsd:integer" use="required" />
+        <xsd:attribute name="reconnect_every" type="xsd:integer" use="required" />
+        <xsd:attribute name="read_timeout"    type="xsd:integer" use="required" />
+        <xsd:attribute name="write_timeout"   type="xsd:integer" use="required" />
+        <xsd:attribute name="use_unix_socket"   type="xsd:integer" use="optional" />
+        <xsd:attribute name="unix_socket"   type="xsd:string" use="optional" />
+    </xsd:complexType>
+
+</xsd:schema>

@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+
+    <!-- Main Config Element -->    
+    <xsd:element name="config">
+        <xsd:complexType>
+            <xsd:choice minOccurs="3" maxOccurs="3">
+                <xsd:element name="rabbitmq" type="RABBITMQ_CONFIG" minOccurs="1" maxOccurs="1"/>
+                <xsd:element name="tsds"     type="TSDS_CONFIG"     minOccurs="1" maxOccurs="1"/>
+                <xsd:element name="stagger"  type="STAGGER"         minOccurs="1" maxOccurs="1"/>
+            </xsd:choice>
+        </xsd:complexType>
+    </xsd:element>
+
+
+    <!-- Required Child Elements -->
+    <xsd:complexType name="RABBITMQ_CONFIG">
+        <xsd:attribute name="ip"       type="xsd:string"  use="required" />
+        <xsd:attribute name="port"     type="xsd:integer" use="required" />
+        <xsd:attribute name="user"     type="xsd:string"  use="required" />
+        <xsd:attribute name="password" type="xsd:string"  use="required" />
+    </xsd:complexType>
+
+    <xsd:complexType name="TSDS_CONFIG">
+        <xsd:attribute name="url"       type="xsd:string" use="required" />
+        <xsd:attribute name="namespace" type="xsd:string" use="optional" />
+        <xsd:attribute name="user"      type="xsd:string" use="required" />
+        <xsd:attribute name="password"  type="xsd:string" use="required" />
+	<xsd:attribute name="realm"     type="xsd:string" />
+    </xsd:complexType>
+
+    <xsd:complexType name="STAGGER">
+        <xsd:attribute name="seconds" type="xsd:integer" use="required" />
+    </xsd:complexType>
+
+    <!-- IPv4/IPv6 address validator -->
+    <xsd:simpleType name="IP_ADDR">
+        <xsd:restriction base="xsd:string">
+            <xsd:pattern value="((:(:[0-9a-fA-F]{1,4}){0,5}((:[0-9a-fA-F]{1,4}){1,2}|:((25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})))|[0-9a-fA-F]{1,4}:([0-9a-fA-F]{1,4}:([0-9a-fA-F]{1,4}:([0-9a-fA-F]{1,4}:([0-9a-fA-F]{1,4}:([0-9a-fA-F]{1,4}:([0-9a-fA-F]{1,4}:([0-9a-fA-F]{1,4}|:)|(:([0-9a-fA-F]{1,4})?|((25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))))|:(((25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4})?|))|(:((25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|:[0-9a-fA-F]{1,4}(:((25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|(:[0-9a-fA-F]{1,4}){0,2})|:))|((:[0-9a-fA-F]{1,4}){0,2}(:((25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|(:[0-9a-fA-F]{1,4}){1,2})|:))|((:[0-9a-fA-F]{1,4}){0,3}(:((25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|(:[0-9a-fA-F]{1,4}){1,2})|:))|((:[0-9a-fA-F]{1,4}){0,4}(:((25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|(:[0-9a-fA-F]{1,4}){1,2})|:))|((25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))))"/>
+        </xsd:restriction>
+    </xsd:simpleType>
+
+</xsd:schema>

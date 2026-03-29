@@ -1,0 +1,60 @@
+{
+    "acme.grnoc.iu.edu": [
+      {
+        "*intf": "Shelf 5 - Slot 1.0 - Port 5",
+        "time": 689644800,
+        "txpower": "75",
+        "*node": "acme.grnoc.iu.edu",
+        "rxpower": "53"
+      },
+      {
+        "*intf": "Shelf 1 - Slot 0.0 - Port 8",
+        "time": 689644800,
+        "txpower": "11",
+        "*node": "acme.grnoc.iu.edu",
+        "rxpower": "23"
+      },
+      {
+        "*intf": "Shelf 1 - Slot 0.0 - Port 9",
+        "time": 689644800,
+        "txpower": "65",
+        "*node": "acme.grnoc.iu.edu",
+        "rxpower": "98"
+      },
+      {
+        "*intf": "Shelf 1 - Slot 0.0 - Port 8",
+        "time": 689644800,
+        "txpower": "11",
+        "*node": "acme.grnoc.iu.edu",
+        "rxpower": "23"
+      },
+      {
+        "*intf": "Shelf 5 - Slot 1.0 - Port 1",
+        "time": 689644800,
+        "txpower": "32",
+        "*node": "acme.grnoc.iu.edu",
+        "rxpower": "56"
+      },
+      {
+        "*intf": "Shelf 5 - Slot 1.0 - Port 1",
+        "time": 689644800,
+        "txpower": "32",
+        "*node": "acme.grnoc.iu.edu",
+        "rxpower": "56"
+      },
+      {
+        "*intf": "Shelf 1 - Slot 0.0 - Port 9",
+        "time": 689644800,
+        "txpower": "65",
+        "*node": "acme.grnoc.iu.edu",
+        "rxpower": "98"
+      },
+      {
+        "*intf": "Shelf 5 - Slot 1.0 - Port 5",
+        "time": 689644800,
+        "txpower": "75",
+        "*node": "acme.grnoc.iu.edu",
+        "rxpower": "53"
+      }
+    ]
+}

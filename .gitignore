@@ -1,0 +1,36 @@
+# Local Virtual Environment
+venv/*
+.vscode/*
+# Files generated in build process
+dist/*
+/MYMETA.json
+/MYMETA.yml
+/Makefile
+/Makefile.old
+/blib
+/pm_to_blib
+/simp-*.tar
+/simp-*.tar.gz
+
+# Files generated during tests
+/t/conf/*DataConfig.xml
+/t/conf/redis.conf
+/t/conf/*.pid
+/t/redis.[0-9]*
+
+# perltidy
+.perltidyrc
+
+# NYTProf Profiles
+nytpro*
+
+# Editor tempfiles
+~*
+*~
+*.bak
+*.swp
+redis_config.xml
+conf/redis_config.xml
+redis_config.xml
+redis_config.xml
+./conf/tsds/config.xsd
