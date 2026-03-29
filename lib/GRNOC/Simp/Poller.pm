@@ -71,26 +71,21 @@ sub BUILD {
     return $self;
 }
 
-# poller_id  — derived from the StatefulSet pod ordinal in $HOSTNAME
-#              e.g. "simp-poller-2" → 2.  Defaults to 0 if not in a StatefulSet.
-# total_pollers — injected by Helm via the SIMP_TOTAL_POLLERS env var.
-#                 Defaults to 1 (poll everything) if not set.
+# Both values are injected by Helm as env vars at deploy time.
+# SIMP_POLLER_ID    — index of this instance (0-based)
+# SIMP_TOTAL_POLLERS — total number of poller instances
 sub _load_ring_config {
 
     my ( $self ) = @_;
 
-    # Extract trailing ordinal from StatefulSet hostname (simp-poller-2 → 2)
-    if ( defined $ENV{HOSTNAME} && $ENV{HOSTNAME} =~ /-(\d+)$/ ) {
-        $self->_set_poller_id( int($1) );
-        $self->logger->info( "Hash ring: poller_id=" . $self->poller_id
-            . " (from HOSTNAME=$ENV{HOSTNAME})" );
+    if ( defined $ENV{SIMP_POLLER_ID} && $ENV{SIMP_POLLER_ID} =~ /^\d+$/ ) {
+        $self->_set_poller_id( int( $ENV{SIMP_POLLER_ID} ) );
+        $self->logger->info( "Hash ring: poller_id=" . $self->poller_id );
     }
 
-    # Total is set by Helm at deploy time via the SIMP_TOTAL_POLLERS env var
     if ( defined $ENV{SIMP_TOTAL_POLLERS} && $ENV{SIMP_TOTAL_POLLERS} =~ /^\d+$/ && $ENV{SIMP_TOTAL_POLLERS} > 0 ) {
         $self->_set_total_pollers( int( $ENV{SIMP_TOTAL_POLLERS} ) );
-        $self->logger->info( "Hash ring: total_pollers=" . $self->total_pollers
-            . " (from SIMP_TOTAL_POLLERS env var)" );
+        $self->logger->info( "Hash ring: total_pollers=" . $self->total_pollers );
     }
 }
 
