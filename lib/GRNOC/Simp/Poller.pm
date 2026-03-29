@@ -192,9 +192,14 @@ sub BUILD {
 sub _load_ring_config {
     my ($self) = @_;
 
+    # Resolve poller_id: explicit env var, then hostname ordinal (simp-poller-2 → 2)
     if (defined $ENV{SIMP_POLLER_ID} && $ENV{SIMP_POLLER_ID} =~ /^\d+$/) {
         $self->_set_poller_id(int($ENV{SIMP_POLLER_ID}));
     }
+    elsif (defined $ENV{HOSTNAME} && $ENV{HOSTNAME} =~ /-(\d+)$/) {
+        $self->_set_poller_id(int($1));
+    }
+
     if (defined $ENV{SIMP_TOTAL_POLLERS} && $ENV{SIMP_TOTAL_POLLERS} =~ /^\d+$/ && $ENV{SIMP_TOTAL_POLLERS} > 0) {
         $self->_set_total_pollers(int($ENV{SIMP_TOTAL_POLLERS}));
     }
