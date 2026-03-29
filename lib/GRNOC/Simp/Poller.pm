@@ -11,7 +11,8 @@ use Data::Dumper;
 use File::Path 'rmtree';
 use Parallel::ForkManager;
 use POSIX qw( setuid setgid );
-use Types::Standard qw( Str Bool );
+use Types::Standard qw( Str Bool Int );
+use Digest::MD5 qw(md5_hex);
 
 use GRNOC::Config;
 use GRNOC::Log;
@@ -118,6 +119,20 @@ has do_reload => (
     default => 0
 );
 
+# Hash ring: index of this poller instance (0-based), injected via SIMP_POLLER_ID
+has poller_id => (
+    is      => 'rwp',
+    isa     => Int,
+    default => 0
+);
+
+# Hash ring: total poller instances, injected via SIMP_TOTAL_POLLERS
+has total_pollers => (
+    is      => 'rwp',
+    isa     => Int,
+    default => 1
+);
+
 
 =head2 BUILD
     Builds the simp_poller object and sets its parameters.
@@ -163,7 +178,43 @@ sub BUILD {
     }
     $self->logger->debug("Set simp-poller status dir to " . $self->status_dir);
 
+    $self->_load_ring_config();
+
     return $self;
+}
+
+
+=head2 _load_ring_config
+    Reads SIMP_POLLER_ID and SIMP_TOTAL_POLLERS from the environment.
+    Both are injected by Helm at deploy time. Defaults to id=0, total=1
+    (all hosts polled) when the env vars are absent.
+=cut
+sub _load_ring_config {
+    my ($self) = @_;
+
+    if (defined $ENV{SIMP_POLLER_ID} && $ENV{SIMP_POLLER_ID} =~ /^\d+$/) {
+        $self->_set_poller_id(int($ENV{SIMP_POLLER_ID}));
+    }
+    if (defined $ENV{SIMP_TOTAL_POLLERS} && $ENV{SIMP_TOTAL_POLLERS} =~ /^\d+$/ && $ENV{SIMP_TOTAL_POLLERS} > 0) {
+        $self->_set_total_pollers(int($ENV{SIMP_TOTAL_POLLERS}));
+    }
+
+    $self->logger->info(sprintf(
+        "Hash ring: poller_id=%s total_pollers=%s",
+        $self->poller_id, $self->total_pollers
+    ));
+}
+
+
+=head2 _host_in_ring
+    Returns 1 if the given IP belongs to this poller's slice of the hash ring.
+    Uses the first 32 bits of MD5(ip) mod total_pollers for even distribution.
+=cut
+sub _host_in_ring {
+    my ($self, $ip) = @_;
+    return 1 if $self->total_pollers <= 1;
+    my $hash = hex(substr(md5_hex($ip), 0, 8));
+    return ($hash % $self->total_pollers) == $self->poller_id;
 }
 
 
@@ -375,6 +426,15 @@ sub _process_host_configs {
             # IP already regex validated by XSD.
             my $transport = $host->{ip} =~ m/^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/ ? 'udp4' : 'udp6';
             $host->{transport_domain} = $transport;
+
+            # Skip hosts that don't belong to this poller's hash ring slot
+            unless ($self->_host_in_ring($host->{ip})) {
+                $self->logger->debug(sprintf(
+                    "Hash ring: skipping %s (not in slot %s/%s)",
+                    $host->{ip}, $self->poller_id, $self->total_pollers
+                ));
+                next;
+            }
 
             # Get the ports the host should use.
             # If the host has ports set for a group, those will be applied in the group loop.

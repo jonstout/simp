@@ -1,0 +1,50 @@
+{{/*
+  One single-replica Deployment per poller slot.
+  Helm injects the stable SIMP_POLLER_ID for each one.
+  To scale: change poller.replicas in values.yaml and redeploy.
+*/}}
+{{- $total := .Values.poller.replicas | int }}
+{{- range $i, $_ := until $total }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simp-poller-{{ $i }}
+  namespace: {{ $.Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: simp-poller
+      poller-id: "{{ $i }}"
+  template:
+    metadata:
+      labels:
+        app: simp-poller
+        poller-id: "{{ $i }}"
+    spec:
+      containers:
+        - name: poller
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+          env:
+            - name: SIMP_POLLER_ID
+              value: "{{ $i }}"
+            - name: SIMP_TOTAL_POLLERS
+              value: "{{ $total }}"
+          args:
+            - perl
+            - /usr/bin/simp_poller.pl
+            - --config
+            - /etc/simp/config.xml
+            - --logging
+            - /etc/simp/logging.conf
+            - --nofork
+          volumeMounts:
+            - name: simp-config
+              mountPath: /etc/simp
+          terminationGracePeriodSeconds: 30
+      volumes:
+        - name: simp-config
+          configMap:
+            name: simp-config
+{{- end }}
